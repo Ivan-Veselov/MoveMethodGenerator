@@ -115,7 +115,7 @@ public class AppStarter implements ApplicationStarter {
                 log.info("Number of methods after filtration: " + info.getMethodsAfterFiltration().size());
 
                 try {
-                    CsvSerializer.getInstance().serialize(new Dataset(info), outputDir);
+                    CsvSerializer.getInstance().serialize(new ContextPathDataset(new Dataset(info)), outputDir);
                 } catch (Exception e) {
                     exceptionRef.set(e);
                 }
