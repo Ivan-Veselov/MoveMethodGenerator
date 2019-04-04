@@ -21,14 +21,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
 
-public class CsvSerializer {
-    private static final @NotNull CsvSerializer INSTANCE = new CsvSerializer();
+public class ContextPathCsvSerializer {
+    private static final @NotNull
+    ContextPathCsvSerializer INSTANCE = new ContextPathCsvSerializer();
 
     private static final @NotNull String METHODS_FILE_NAME = "methods.csv";
 
@@ -40,54 +40,12 @@ public class CsvSerializer {
 
     private static final int MAX_PATH_WIDTH = 2;
 
-    private CsvSerializer() {
+    private ContextPathCsvSerializer() {
     }
 
-    public static @NotNull CsvSerializer getInstance() {
+    public static @NotNull
+    ContextPathCsvSerializer getInstance() {
         return INSTANCE;
-    }
-
-    public void serialize(
-        final @NotNull Dataset dataset,
-        final @NotNull Path targetDir
-    ) throws IOException {
-        targetDir.toFile().mkdirs();
-
-        try (
-            BufferedWriter writer = Files.newBufferedWriter(targetDir.resolve(CLASSES_FILE_NAME), CREATE_NEW);
-            CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.RFC4180)
-        ) {
-            List<PsiClass> classes = dataset.getClasses();
-            for (int classId = 0; classId < classes.size(); classId++) {
-                PsiClass clazz = classes.get(classId);
-
-                csvPrinter.printRecord(
-                    classId,
-                    clazz.getQualifiedName(),
-                    getPathToContainingFile(clazz),
-                    clazz.getNode().getStartOffset()
-                );
-            }
-        }
-
-        try (
-            BufferedWriter writer = Files.newBufferedWriter(targetDir.resolve(METHODS_FILE_NAME), CREATE_NEW);
-            CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.RFC4180)
-        ) {
-            List<Dataset.Method> methods = dataset.getMethods();
-            for (int methodId = 0; methodId < methods.size(); methodId++) {
-                Dataset.Method method = methods.get(methodId);
-
-                csvPrinter.printRecord(
-                    methodId,
-                    MethodUtils.fullyQualifiedName(method.getPsiMethod()),
-                    getPathToContainingFile(method.getPsiMethod()),
-                    method.getPsiMethod().getNode().getStartOffset(),
-                    method.getIdOfContainingClass(),
-                    Arrays.stream(method.getIdsOfPossibleTargets()).mapToObj(Integer::toString).collect(Collectors.joining(" "))
-                );
-            }
-        }
     }
 
     public void serialize(

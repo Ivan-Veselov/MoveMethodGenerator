@@ -20,7 +20,7 @@ public class ContextPathDataset {
     Map<PsiMethod, Integer> idOfMethod = new HashMap<>();
 
     public ContextPathDataset(final @NotNull Dataset dataset) {
-        classes = dataset.getClasses();
+        classes = dataset.getClasses().stream().map(it -> it.getElement()).collect(Collectors.toList());
 
         Set<PsiMethod> allMethods =
             classes.stream()
@@ -43,7 +43,7 @@ public class ContextPathDataset {
         points = new ArrayList<>();
 
         for (Dataset.Method method : dataset.getMethods()) {
-            int methodId = idOfMethod.get(method.getPsiMethod());
+            int methodId = idOfMethod.get(method.getPsiMethod().getElement());
 
             points.add(new Point(methodId, method.getIdOfContainingClass(), 1));
 
