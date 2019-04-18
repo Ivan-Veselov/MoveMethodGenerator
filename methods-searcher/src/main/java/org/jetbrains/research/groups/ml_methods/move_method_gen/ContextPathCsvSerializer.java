@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static org.jetbrains.research.groups.ml_methods.move_method_gen.CsvSerializer.Headers.*;
 
 public class ContextPathCsvSerializer {
     private static final @NotNull
@@ -35,6 +36,10 @@ public class ContextPathCsvSerializer {
     private static final @NotNull String CLASSES_FILE_NAME = "classes.csv";
 
     private static final @NotNull String POINTS_FILE_NAME = "points.csv";
+
+    private static final @NotNull CSVFormat METHODS_FILE_FORMAT = CSVFormat.RFC4180.withHeader(ID.toString(), NAME.toString(), "context", FILE.toString(), OFFSET.toString(), CONTAINING_CLASS_ID.toString(), TARGET_IDS.toString());
+
+    private static final @NotNull CSVFormat CLASSES_FILE_FORMAT = CSVFormat.RFC4180.withHeader(ID.toString(), NAME.toString(), "methods", FILE.toString(), OFFSET.toString());
 
     private static final int MAX_PATH_LENGTH = 8;
 
@@ -56,7 +61,7 @@ public class ContextPathCsvSerializer {
 
         try (
             BufferedWriter writer = Files.newBufferedWriter(targetDir.resolve(METHODS_FILE_NAME), CREATE_NEW);
-            CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.RFC4180)
+            CSVPrinter csvPrinter = new CSVPrinter(writer, METHODS_FILE_FORMAT)
         ) {
             List<PsiMethod> methods = dataset.getMethods();
             for (int methodId = 0; methodId < methods.size(); methodId++) {
@@ -88,14 +93,16 @@ public class ContextPathCsvSerializer {
                     MethodUtils.fullyQualifiedName(method),
                     pathContext,
                     getPathToContainingFile(method),
-                    method.getNode().getStartOffset()
+                    method.getNode().getStartOffset(),
+                    dataset.getIdOfContainingClass(method),
+                    dataset.getIdsOfTargetClasses(method).stream().map(Object::toString).collect(Collectors.joining(" "))
                 );
             }
         }
 
         try (
             BufferedWriter writer = Files.newBufferedWriter(targetDir.resolve(CLASSES_FILE_NAME), CREATE_NEW);
-            CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.RFC4180)
+            CSVPrinter csvPrinter = new CSVPrinter(writer, CLASSES_FILE_FORMAT)
         ) {
             List<PsiClass> classes = dataset.getClasses();
             for (int classId = 0; classId < classes.size(); classId++) {

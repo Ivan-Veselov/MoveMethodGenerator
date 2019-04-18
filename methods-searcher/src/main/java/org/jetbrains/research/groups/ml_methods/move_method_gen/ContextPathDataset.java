@@ -16,8 +16,11 @@ public class ContextPathDataset {
 
     private final @NotNull List<Point> points;
 
-    private final @NotNull
-    Map<PsiMethod, Integer> idOfMethod = new HashMap<>();
+    private final @NotNull Map<PsiMethod, Integer> idOfMethod = new HashMap<>();
+
+    private final @NotNull Map<PsiClass, Integer> idOfClass = new HashMap<>();
+
+    private final @NotNull Map<PsiMethod, List<Integer>> idOfTargetClasses = new HashMap<>();
 
     public ContextPathDataset(final @NotNull Dataset dataset) {
         classes = dataset.getClasses().stream().map(it -> it.getElement()).collect(Collectors.toList());
@@ -40,16 +43,27 @@ public class ContextPathDataset {
             }
         }
 
+        {
+            int classId = 0;
+            for (PsiClass clazz : classes) {
+                idOfClass.put(clazz, classId);
+                classId++;
+            }
+        }
+
         points = new ArrayList<>();
 
         for (Dataset.Method method : dataset.getMethods()) {
-            int methodId = idOfMethod.get(method.getPsiMethod().getElement());
+            PsiMethod psiMethod = method.getPsiMethod().getElement();
+            int methodId = idOfMethod.get(psiMethod);
 
             points.add(new Point(methodId, method.getIdOfContainingClass(), 1));
 
             for (int targetId : method.getIdsOfPossibleTargets()) {
                 points.add(new Point(methodId, targetId, 0));
             }
+
+            idOfTargetClasses.put(psiMethod, Arrays.stream(method.getIdsOfPossibleTargets()).boxed().collect(Collectors.toList()));
         }
     }
 
@@ -76,6 +90,18 @@ public class ContextPathDataset {
         }
 
         return idsOfMethods;
+    }
+
+    public int getIdOfContainingClass(final @NotNull PsiMethod psiMethod) {
+        return idOfClass.get(psiMethod.getContainingClass());
+    }
+
+    public List<Integer> getIdsOfTargetClasses(final @NotNull PsiMethod psiMethod) {
+        if (!idOfTargetClasses.containsKey(psiMethod)) {
+            return Collections.emptyList();
+        }
+
+        return idOfTargetClasses.get(psiMethod);
     }
 
     public class Point {
