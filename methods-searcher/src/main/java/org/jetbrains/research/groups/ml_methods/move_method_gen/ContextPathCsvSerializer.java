@@ -73,7 +73,7 @@ public class ContextPathCsvSerializer {
                 );
 
                 ExtractFeaturesTask extractTask =
-                    new ExtractFeaturesTask(cmdValues, method.getText());
+                    new ExtractFeaturesTask(cmdValues, removeDanglingOneLineComments(method.getText()));
 
                 ArrayList<ProgramFeatures> methodsContexts = new ArrayList<>(
                     extractTask.extractSingleFile()
@@ -82,6 +82,7 @@ public class ContextPathCsvSerializer {
                         .limit(1)
                         .collect(Collectors.toList())
                 );
+
 
                 String pathContext = extractTask.featuresToString(methodsContexts);
                 if (pathContext.isEmpty()) {
@@ -130,6 +131,10 @@ public class ContextPathCsvSerializer {
                 );
             }
         }
+    }
+
+    private @NotNull String removeDanglingOneLineComments(final @NotNull String code) {
+        return code.replaceAll("//.*?\\z", "");
     }
 
     private @NotNull String splitName(final @NotNull PsiMethod method) {
