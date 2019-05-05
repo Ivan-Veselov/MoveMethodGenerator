@@ -9,6 +9,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiElementFactoryImpl;
 import com.intellij.refactoring.move.moveInstanceMethod.MoveInstanceMethodHandler;
 import com.intellij.refactoring.move.moveInstanceMethod.MoveInstanceMethodProcessor;
+import com.intellij.refactoring.rename.RenameProcessor;
 import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.PatternLayout;
 import org.jetbrains.annotations.NotNull;
@@ -24,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.jetbrains.research.groups.ml_methods.move_method_gen.ClassUtils.hasMethodWithName;
 import static org.jetbrains.research.groups.ml_methods.move_method_gen.utils.MethodUtils.fullyQualifiedName;
 
 public class AppStarter extends ProjectAppStarter {
@@ -92,7 +94,7 @@ public class AppStarter extends ProjectAppStarter {
             Ref<Exception> exceptionRef = new Ref<>(null);
             WriteCommandAction.runWriteCommandAction(project, () -> {
                 try {
-                    rewriteMethod(methods.get(methodToMove.getMethodId()).getPsiMethod());
+                    MethodRewriter.getInstance().rewriteMethod(methods.get(methodToMove.getMethodId()).getPsiMethod());
                 } catch (Exception e) {
                     exceptionRef.set(e);
                 }
@@ -109,12 +111,26 @@ public class AppStarter extends ProjectAppStarter {
                         int targetClassId = methodToMove.getTargetClassId();
                         SmartPsiElementPointer<PsiClass> targetClass = classes.get(targetClassId);
                         SmartPsiElementPointer<PsiMethod> psiMethod = methods.get(methodToMove.getMethodId()).getPsiMethod();
-                        movedMethods.addMethod(moveMethod(project, psiMethod, targetClass), methodId, methods.get(methodId).getIdOfContainingClass(), targetClassId);
+
+                        SmartPsiElementPointer<PsiMethod> movedMethod = moveMethod(project, psiMethod, targetClass);
+                        movedMethods.addMethod(movedMethod, methodId, methods.get(methodId).getIdOfContainingClass(), targetClassId);
                     } catch (Exception e) {
                         exceptionRef.set(e);
                     }
                 }
             );
+
+            if (!exceptionRef.isNull()) {
+                throw exceptionRef.get();
+            }
+
+            WriteCommandAction.runWriteCommandAction(project, () -> {
+                try {
+                    MethodRewriter.getInstance().postRewriteMethod(movedMethods.getList().get(movedMethods.getList().size() - 1).getMethod());
+                } catch (Exception e) {
+                    exceptionRef.set(e);
+                }
+            });
 
             if (!exceptionRef.isNull()) {
                 throw exceptionRef.get();
@@ -132,6 +148,15 @@ public class AppStarter extends ProjectAppStarter {
         return csvFilesDir;
     }
 
+    private void renameMethod(
+        final @NotNull Project project,
+        final @NotNull PsiMethod method,
+        final @NotNull String newName
+    ) {
+        RenameProcessor renameProcessor = new RenameProcessor(project, method, newName, false, false);
+        renameProcessor.run();
+    }
+
     private @NotNull SmartPsiElementPointer<PsiMethod> moveMethod(
         final @NotNull Project project,
         final @NotNull SmartPsiElementPointer<PsiMethod> method,
@@ -145,6 +170,15 @@ public class AppStarter extends ProjectAppStarter {
         PsiClass targetClass = target.getElement();
         if (targetClass == null) {
             throw new IllegalStateException("Failed to restore class from Smart Pointer: " + target);
+        }
+
+        if (hasMethodWithName(targetClass, psiMethod.getName())) {
+            String newName = psiMethod.getName();
+            while (hasMethodWithName(targetClass, newName)) {
+                newName += "Other";
+            }
+
+            renameMethod(project, psiMethod, newName);
         }
 
         List<PsiVariable> possibleTargetVariables =
@@ -162,6 +196,10 @@ public class AppStarter extends ProjectAppStarter {
 
         PsiVariable targetVariable = possibleTargetVariables.get(0);
         Map<PsiClass, String> parameterNames = MoveInstanceMethodHandler.suggestParameterNames(psiMethod, targetVariable);
+
+        String suggestedName = parameterNames.get(psiMethod.getContainingClass());
+        parameterNames = new HashMap<>();
+        parameterNames.put(psiMethod.getContainingClass(), suggestedName);
 
         MoveInstanceMethodProcessor moveMethodProcessor =
             new MoveInstanceMethodProcessor(
@@ -187,67 +225,9 @@ public class AppStarter extends ProjectAppStarter {
         }.visitElement(targetClass);
 
         if (candidates.size() != 1) {
-            throw new IllegalStateException("Failed to find moved method: " + psiMethod.getName());
+            throw new IllegalStateException("Failed to find moved method: " + psiMethod.getName() + "; Method was moved to " + targetClass.getQualifiedName());
         }
 
         return SmartPointerManager.getInstance(project).createSmartPsiElementPointer(candidates.get(0));
-    }
-
-    // todo: qualifiers
-    private void rewriteMethod(final @NotNull SmartPsiElementPointer<PsiMethod> method) {
-        PsiMethod psiMethod = method.getElement();
-        if (psiMethod == null) {
-            throw new IllegalStateException("Failed to restore method from Smart Pointer: " + method);
-        }
-
-        AccessorsMap accessorsMap = new AccessorsMap(
-            Arrays.stream(psiMethod.getContainingClass().getAllMethods()).collect(Collectors.toList())
-        );
-
-        List<PsiReferenceExpression> allReferenceExpressions = new ArrayList<>();
-
-        new JavaRecursiveElementVisitor() {
-            @Override
-            public void visitReferenceExpression(
-                final @NotNull PsiReferenceExpression expression
-            ) {
-                super.visitReferenceExpression(expression);
-                allReferenceExpressions.add(expression);
-            }
-        }.visitElement(psiMethod);
-
-        // this way the order is from leaves to AST root
-        Collections.reverse(allReferenceExpressions);
-
-        for (PsiReferenceExpression expression : allReferenceExpressions) {
-            Optional<PsiField> optional = MethodUtils.referencedNonPublicField(expression);
-            if (!optional.isPresent()) {
-                continue;
-            }
-
-            PsiField field = optional.get();
-
-            if (MethodUtils.isInLeftSideOfAssignment(expression)) {
-                // setter
-
-                PsiMethod setter = accessorsMap.getFieldToSetter().get(field);
-
-                PsiAssignmentExpression assignment = (PsiAssignmentExpression) expression.getParent();
-                PsiExpression setterCallExpression =
-                        PsiElementFactoryImpl.SERVICE.getInstance(method.getProject())
-                            .createExpressionFromText(setter.getName() + "(" + assignment.getRExpression().getText()  + ")", expression);
-
-                assignment.replace(setterCallExpression);
-            } else {
-                // getter
-
-                PsiMethod getter = accessorsMap.getFieldToGetter().get(field);
-                PsiExpression getterCallExpression =
-                        PsiElementFactoryImpl.SERVICE.getInstance(method.getProject())
-                                .createExpressionFromText(getter.getName() + "()", expression);
-
-                expression.replace(getterCallExpression);
-            }
-        }
     }
 }

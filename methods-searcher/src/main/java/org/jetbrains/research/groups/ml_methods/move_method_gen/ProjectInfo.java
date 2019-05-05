@@ -30,6 +30,8 @@ public class ProjectInfo {
                 add(new BuildersFilter());
                 add(new EmptyClassesFilter());
                 add(new AnonymousClassesFilter());
+                add(new InaccessibleClassFilter());
+                add(new GenericsFilter());
             }};
 
     private final @NotNull List<PsiMethod> methods;
@@ -77,6 +79,9 @@ public class ProjectInfo {
                 add(new FilterWithCounter<>(new PrivateFieldAccessorsFilter(ProjectInfo.this)));
                 add(new FilterWithCounter<>(new OverridingMethodsFilter()));
                 add(new FilterWithCounter<>(new OverriddenMethodsFilter()));
+                add(new FilterWithCounter<>(new MethodCallWithSuperFilter()));
+                add(new FilterWithCounter<>(new PrivateClassUserFilter()));
+                add(new FilterWithCounter<>(new GenericTypeUserFilter()));
                 add(new FilterWithCounter<>(new NoTargetsMethodsFilter(new RelevantClasses(classes))));
             }};
 
